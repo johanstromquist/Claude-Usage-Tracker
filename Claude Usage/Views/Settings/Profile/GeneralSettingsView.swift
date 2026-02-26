@@ -132,8 +132,9 @@ struct GeneralSettingsView: View {
 
                                     VStack(spacing: DesignTokens.Spacing.small) {
                                         ThresholdIndicator(level: "75%", color: SettingsColors.usageMedium, label: "notifications.threshold.warning".localized)
+                                        ThresholdIndicator(level: "85%", color: SettingsColors.usageMedium, label: "notifications.threshold.approaching".localized)
                                         ThresholdIndicator(level: "90%", color: SettingsColors.usageHigh, label: "notifications.threshold.high".localized)
-                                        ThresholdIndicator(level: "95%", color: SettingsColors.usageCritical, label: "notifications.threshold.critical".localized)
+                                        ThresholdIndicator(level: "95%+", color: SettingsColors.usageCritical, label: "notifications.threshold.critical".localized)
                                         ThresholdIndicator(level: "0%", color: SettingsColors.usageLow, label: "notifications.threshold.session_reset".localized)
                                     }
                                 }

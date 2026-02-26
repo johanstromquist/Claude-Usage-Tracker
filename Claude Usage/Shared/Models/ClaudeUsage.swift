@@ -46,9 +46,11 @@ struct ClaudeUsage: Codable, Equatable {
     @available(*, deprecated, message: "Use UsageStatusCalculator.calculateStatus() with showRemaining parameter")
     var statusLevel: UsageStatusLevel {
         switch remainingPercentage {
-        case 20...:
+        case 25...:
             return .safe
-        case 10..<20:
+        case 10..<25:
+            return .warning
+        case 5..<10:
             return .moderate
         default:
             return .critical
@@ -84,7 +86,8 @@ struct ClaudeUsage: Codable, Equatable {
 /// Usage status level for color coding
 /// Thresholds depend on display mode (used vs remaining percentage)
 enum UsageStatusLevel {
-    case safe       // Used mode: 0-50% used | Remaining mode: >20% remaining
-    case moderate   // Used mode: 50-80% used | Remaining mode: 10-20% remaining
-    case critical   // Used mode: 80-100% used | Remaining mode: <10% remaining
+    case safe       // Used mode: 0-75% used | Remaining mode: >25% remaining
+    case warning    // Used mode: 75-90% used | Remaining mode: 10-25% remaining
+    case moderate   // Used mode: 90-95% used | Remaining mode: 5-10% remaining
+    case critical   // Used mode: 95-100% used | Remaining mode: <5% remaining
 }

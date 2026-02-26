@@ -99,6 +99,7 @@ class NotificationManager: NotificationServiceProtocol {
     }
 
     /// Checks usage and sends appropriate alerts (profile-aware)
+    /// Fires notifications at discrete milestones: 75, 85, 90, then every % from 95+
     func checkAndNotify(usage: ClaudeUsage, profileName: String, settings: NotificationSettings) {
         // Check if notifications are enabled for this profile
         guard settings.enabled else {
@@ -109,45 +110,40 @@ class NotificationManager: NotificationServiceProtocol {
 
         // Check for session reset (went from >0% to 0%)
         if previousSessionPercentage > 0.0 && sessionPercentage == 0.0 {
+            sentNotifications.removeAll()
             sendProfileAlert(
                 profileName: profileName,
                 type: .sessionReset,
+                milestone: 0,
                 percentage: sessionPercentage,
                 resetTime: usage.sessionResetTime
             )
-
-            // Note: Auto-start session is handled per-profile but called from elsewhere
         }
 
         // Update previous percentage for next check
         previousSessionPercentage = sessionPercentage
 
-        // Clear lower threshold notifications to allow re-notification
-        clearLowerThresholdNotifications(currentPercentage: sessionPercentage)
+        // Define milestones and their associated alert types / settings gates
+        let milestones: [(value: Int, type: AlertType, enabled: Bool)] = [
+            (75, .sessionInfo, settings.threshold75Enabled),
+            (85, .sessionInfo, settings.threshold85Enabled),
+            (90, .sessionWarning, settings.threshold90Enabled),
+            (95, .sessionCritical, settings.threshold95Enabled),
+            (96, .sessionCritical, settings.threshold95Enabled),
+            (97, .sessionCritical, settings.threshold95Enabled),
+            (98, .sessionCritical, settings.threshold95Enabled),
+            (99, .sessionCritical, settings.threshold95Enabled),
+            (100, .sessionCritical, settings.threshold95Enabled),
+        ]
 
-        // 95% threshold
-        if sessionPercentage >= 95 && settings.threshold95Enabled {
+        for milestone in milestones {
+            guard milestone.enabled, sessionPercentage >= Double(milestone.value) else {
+                continue
+            }
             sendProfileAlert(
                 profileName: profileName,
-                type: .sessionCritical,
-                percentage: sessionPercentage,
-                resetTime: usage.sessionResetTime
-            )
-        }
-        // 90% threshold
-        else if sessionPercentage >= 90 && settings.threshold90Enabled {
-            sendProfileAlert(
-                profileName: profileName,
-                type: .sessionWarning,
-                percentage: sessionPercentage,
-                resetTime: usage.sessionResetTime
-            )
-        }
-        // 75% threshold
-        else if sessionPercentage >= 75 && settings.threshold75Enabled {
-            sendProfileAlert(
-                profileName: profileName,
-                type: .sessionInfo,
+                type: milestone.type,
+                milestone: milestone.value,
                 percentage: sessionPercentage,
                 resetTime: usage.sessionResetTime
             )
@@ -164,6 +160,7 @@ class NotificationManager: NotificationServiceProtocol {
         let settings = NotificationSettings(
             enabled: true,
             threshold75Enabled: true,
+            threshold85Enabled: true,
             threshold90Enabled: true,
             threshold95Enabled: true
         )
@@ -172,9 +169,9 @@ class NotificationManager: NotificationServiceProtocol {
     }
 
     /// Sends a profile-specific usage alert
-    private func sendProfileAlert(profileName: String, type: AlertType, percentage: Double, resetTime: Date?) {
-        // Create unique identifier for this notification
-        let identifier = "\(profileName)_\(type.rawValue)_\(Int(percentage))"
+    private func sendProfileAlert(profileName: String, type: AlertType, milestone: Int, percentage: Double, resetTime: Date?) {
+        // Create unique identifier based on milestone, not actual percentage
+        let identifier = "\(profileName)_\(type.rawValue)_\(milestone)"
 
         // Check if we've already sent this notification
         guard !sentNotifications.contains(identifier) else {
@@ -241,20 +238,6 @@ class NotificationManager: NotificationServiceProtocol {
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
-    /// Clears sent notification tracking for lower percentages
-    /// This allows re-notification if usage goes back up
-    private func clearLowerThresholdNotifications(currentPercentage: Double) {
-        // Remove notifications for percentages lower than current
-        sentNotifications = sentNotifications.filter { identifier in
-            // Extract percentage from identifier (format: "type_percentage")
-            let components = identifier.components(separatedBy: "_")
-            guard components.count >= 2,
-                  let percentage = Double(components.last ?? "0") else {
-                return true // Keep if we can't parse
-            }
-            return percentage >= currentPercentage
-        }
-    }
 }
 
 // MARK: - Alert Types

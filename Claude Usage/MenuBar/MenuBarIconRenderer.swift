@@ -1003,6 +1003,8 @@ final class MenuBarIconRenderer {
         switch level {
         case .safe:
             return NSColor.systemGreen
+        case .warning:
+            return NSColor.systemYellow
         case .moderate:
             return NSColor.systemOrange
         case .critical:

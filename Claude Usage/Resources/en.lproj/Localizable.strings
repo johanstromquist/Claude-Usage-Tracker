@@ -123,8 +123,9 @@
 "notifications.enable.description" = "Receive alerts when approaching usage limits";
 "notifications.alert_thresholds" = "Alert Thresholds";
 "notifications.threshold.warning" = "Warning";
+"notifications.threshold.approaching" = "Approaching Limit";
 "notifications.threshold.high" = "High Usage";
-"notifications.threshold.critical" = "Critical";
+"notifications.threshold.critical" = "Critical (every %)";
 "notifications.threshold.session_reset" = "Session Reset";
 
 /* ==================== */

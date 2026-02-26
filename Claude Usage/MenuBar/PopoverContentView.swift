@@ -597,6 +597,7 @@ struct SmartUsageCard: View {
     private var statusColor: Color {
         switch statusLevel {
         case .safe: return .green
+        case .warning: return .yellow
         case .moderate: return .orange
         case .critical: return .red
         }
@@ -605,6 +606,7 @@ struct SmartUsageCard: View {
     private var statusIcon: String {
         switch statusLevel {
         case .safe: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
         case .moderate: return "exclamationmark.triangle.fill"
         case .critical: return "xmark.circle.fill"
         }
@@ -919,6 +921,7 @@ struct APIUsageCard: View {
     private var usageColor: Color {
         switch statusLevel {
         case .safe: return .green
+        case .warning: return .yellow
         case .moderate: return .orange
         case .critical: return .red
         }

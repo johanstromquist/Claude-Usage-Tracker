@@ -13,28 +13,34 @@ final class UsageStatusCalculator {
         showRemaining: Bool
     ) -> UsageStatusLevel {
         if showRemaining {
-            // Old behavior: Based on remaining percentage (like Mac battery)
-            // > 20% remaining: safe (green)
-            // 10-20% remaining: moderate (orange)
-            // < 10% remaining: critical (red)
+            // Based on remaining percentage (like Mac battery)
+            // > 25% remaining: safe (green)
+            // 10-25% remaining: warning (yellow)
+            // 5-10% remaining: moderate (orange)
+            // < 5% remaining: critical (red)
             let remainingPercentage = max(0, 100 - usedPercentage)
             switch remainingPercentage {
-            case 20...:
+            case 25...:
                 return .safe
-            case 10..<20:
+            case 10..<25:
+                return .warning
+            case 5..<10:
                 return .moderate
             default:
                 return .critical
             }
         } else {
-            // New default behavior: Based on used percentage
-            // 0-50% used: safe (green)
-            // 50-80% used: moderate (orange)
-            // 80-100% used: critical (red)
+            // Based on used percentage
+            // 0-75% used: safe (green)
+            // 75-90% used: warning (yellow)
+            // 90-95% used: moderate (orange)
+            // 95-100% used: critical (red)
             switch usedPercentage {
-            case 0..<50:
+            case 0..<75:
                 return .safe
-            case 50..<80:
+            case 75..<90:
+                return .warning
+            case 90..<95:
                 return .moderate
             default:
                 return .critical
