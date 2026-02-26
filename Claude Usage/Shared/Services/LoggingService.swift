@@ -80,29 +80,29 @@ final class LoggingService {
         os_log("🪟 Window Event: %{public}@", log: uiLogger, type: .debug, event)
     }
 
-    // MARK: - General Logging
+    // MARK: - General Logging (private by default to avoid leaking sensitive data)
 
     func log(_ message: String, type: OSLogType = .default) {
-        os_log("%{public}@", log: generalLogger, type: type, message)
+        os_log("%{private}@", log: generalLogger, type: type, message)
     }
 
     func logError(_ message: String, error: Error? = nil) {
         if let error = error {
-            os_log("❌ %{public}@: %{public}@", log: generalLogger, type: .error, message, error.localizedDescription)
+            os_log("ERROR %{private}@: %{private}@", log: generalLogger, type: .error, message, error.localizedDescription)
         } else {
-            os_log("❌ %{public}@", log: generalLogger, type: .error, message)
+            os_log("ERROR %{private}@", log: generalLogger, type: .error, message)
         }
     }
 
     func logWarning(_ message: String) {
-        os_log("⚠️ %{public}@", log: generalLogger, type: .fault, message)
+        os_log("WARN %{private}@", log: generalLogger, type: .fault, message)
     }
 
     func logInfo(_ message: String) {
-        os_log("ℹ️ %{public}@", log: generalLogger, type: .info, message)
+        os_log("INFO %{private}@", log: generalLogger, type: .info, message)
     }
 
     func logDebug(_ message: String) {
-        os_log("🐛 %{public}@", log: generalLogger, type: .debug, message)
+        os_log("DEBUG %{private}@", log: generalLogger, type: .debug, message)
     }
 }

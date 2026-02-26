@@ -28,6 +28,42 @@ class KeychainService {
         }
     }
 
+    /// Per-profile keychain key using profile UUID as the account identifier
+    struct ProfileKey {
+        let service: String
+        let account: String
+
+        static func claudeSessionKey(profileId: UUID) -> ProfileKey {
+            ProfileKey(service: "com.claudeusagetracker.profile.claude-session-key", account: profileId.uuidString)
+        }
+
+        static func organizationId(profileId: UUID) -> ProfileKey {
+            ProfileKey(service: "com.claudeusagetracker.profile.organization-id", account: profileId.uuidString)
+        }
+
+        static func apiSessionKey(profileId: UUID) -> ProfileKey {
+            ProfileKey(service: "com.claudeusagetracker.profile.api-session-key", account: profileId.uuidString)
+        }
+
+        static func apiOrganizationId(profileId: UUID) -> ProfileKey {
+            ProfileKey(service: "com.claudeusagetracker.profile.api-organization-id", account: profileId.uuidString)
+        }
+
+        static func cliCredentialsJSON(profileId: UUID) -> ProfileKey {
+            ProfileKey(service: "com.claudeusagetracker.profile.cli-credentials", account: profileId.uuidString)
+        }
+
+        static func allKeys(profileId: UUID) -> [ProfileKey] {
+            return [
+                claudeSessionKey(profileId: profileId),
+                organizationId(profileId: profileId),
+                apiSessionKey(profileId: profileId),
+                apiOrganizationId(profileId: profileId),
+                cliCredentialsJSON(profileId: profileId),
+            ]
+        }
+    }
+
     // MARK: - Public Methods
 
     /// Saves a string value to the Keychain
@@ -164,6 +200,165 @@ class KeychainService {
         return status == errSecSuccess
     }
 
+    // MARK: - Profile Key Methods
+
+    func save(_ value: String, for key: ProfileKey) throws {
+        guard let data = value.data(using: .utf8) else {
+            throw KeychainError.invalidData
+        }
+
+        let updateQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: key.service,
+            kSecAttrAccount as String: key.account
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: data
+        ]
+
+        let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
+
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        if updateStatus == errSecItemNotFound {
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: key.service,
+                kSecAttrAccount as String: key.account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+                kSecAttrSynchronizable as String: false
+            ]
+
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                throw KeychainError.saveFailed(status: addStatus)
+            }
+        } else {
+            throw KeychainError.saveFailed(status: updateStatus)
+        }
+    }
+
+    func load(for key: ProfileKey) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: key.service,
+            kSecAttrAccount as String: key.account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess {
+            guard let data = result as? Data,
+                  let value = String(data: data, encoding: .utf8) else {
+                throw KeychainError.invalidData
+            }
+            return value
+        } else if status == errSecItemNotFound {
+            return nil
+        } else {
+            throw KeychainError.loadFailed(status: status)
+        }
+    }
+
+    func delete(for key: ProfileKey) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: key.service,
+            kSecAttrAccount as String: key.account
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            throw KeychainError.deleteFailed(status: status)
+        }
+    }
+
+    /// Deletes all keychain items for a given profile
+    func deleteAllProfileKeys(profileId: UUID) throws {
+        for key in ProfileKey.allKeys(profileId: profileId) {
+            try delete(for: key)
+        }
+    }
+
+    // MARK: - System Keychain (Claude Code credentials)
+
+    /// Reads Claude Code credentials from system Keychain using SecItem API
+    func readSystemCLICredentials() throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Claude Code-credentials",
+            kSecAttrAccount as String: NSUserName(),
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess {
+            guard let data = result as? Data,
+                  let value = String(data: data, encoding: .utf8) else {
+                throw KeychainError.invalidData
+            }
+            return value
+        } else if status == errSecItemNotFound {
+            return nil
+        } else {
+            throw KeychainError.loadFailed(status: status)
+        }
+    }
+
+    /// Writes Claude Code credentials to system Keychain using SecItem API
+    func writeSystemCLICredentials(_ jsonData: String) throws {
+        guard let data = jsonData.data(using: .utf8) else {
+            throw KeychainError.invalidData
+        }
+
+        let service = "Claude Code-credentials"
+        let account = NSUserName()
+
+        // Try update first
+        let updateQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: data
+        ]
+
+        let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
+
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        if updateStatus == errSecItemNotFound {
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+                kSecAttrSynchronizable as String: false
+            ]
+
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                throw KeychainError.saveFailed(status: addStatus)
+            }
+        } else {
+            throw KeychainError.saveFailed(status: updateStatus)
+        }
+    }
 }
 
 // MARK: - KeychainError

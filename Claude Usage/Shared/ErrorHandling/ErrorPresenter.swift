@@ -92,10 +92,11 @@ class ErrorPresenter {
     private func showTooltip(_ message: String) {
         // For macOS, we can use NSUserNotification or create a custom tooltip window
         // This is a simplified version
+        #if DEBUG
         DispatchQueue.main.async {
-            // Could implement custom toast window here
-            print("📱 Toast: \(message)")
+            print("Toast: \(message)")
         }
+        #endif
     }
 
     // MARK: - Error Details View

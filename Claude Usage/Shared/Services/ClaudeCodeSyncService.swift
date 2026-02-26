@@ -14,98 +14,18 @@ class ClaudeCodeSyncService {
 
     private init() {}
 
-    // MARK: - System Keychain Access
+    // MARK: - System Keychain Access (via SecItem API)
 
-    /// Reads Claude Code credentials from system Keychain using security command
+    /// Reads Claude Code credentials from system Keychain
     func readSystemCredentials() throws -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = [
-            "find-generic-password",
-            "-s", "Claude Code-credentials",
-            "-a", NSUserName(),
-            "-w"  // Print password only
-        ]
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        let exitCode = process.terminationStatus
-
-        if exitCode == 0 {
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            guard let value = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
-                throw ClaudeCodeError.invalidJSON
-            }
-            return value
-        } else if exitCode == 44 {
-            // Exit code 44 = item not found
-            return nil
-        } else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            LoggingService.shared.log("Failed to read keychain: \(errorString)")
-            throw ClaudeCodeError.keychainReadFailed(status: OSStatus(exitCode))
-        }
+        return try KeychainService.shared.readSystemCLICredentials()
     }
 
-    /// Writes Claude Code credentials to system Keychain using security command
+    /// Writes Claude Code credentials to system Keychain
     func writeSystemCredentials(_ jsonData: String) throws {
-        LoggingService.shared.log("Writing credentials to keychain using security command")
-
-        // First, delete existing item
-        let deleteProcess = Process()
-        deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        deleteProcess.arguments = [
-            "delete-generic-password",
-            "-s", "Claude Code-credentials",
-            "-a", NSUserName()
-        ]
-
-        try deleteProcess.run()
-        deleteProcess.waitUntilExit()
-
-        let deleteExitCode = deleteProcess.terminationStatus
-        if deleteExitCode == 0 {
-            LoggingService.shared.log("Deleted existing keychain item")
-        } else {
-            LoggingService.shared.log("No existing keychain item to delete (or delete failed with code \(deleteExitCode))")
-        }
-
-        // Add new item using security command
-        let addProcess = Process()
-        addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        addProcess.arguments = [
-            "add-generic-password",
-            "-s", "Claude Code-credentials",
-            "-a", NSUserName(),
-            "-w", jsonData,
-            "-U"  // Update if exists
-        ]
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        addProcess.standardOutput = outputPipe
-        addProcess.standardError = errorPipe
-
-        try addProcess.run()
-        addProcess.waitUntilExit()
-
-        let exitCode = addProcess.terminationStatus
-
-        if exitCode == 0 {
-            LoggingService.shared.log("✅ Added Claude Code system credentials successfully using security command")
-        } else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            LoggingService.shared.log("❌ Failed to add credentials: \(errorString)")
-            throw ClaudeCodeError.keychainWriteFailed(status: OSStatus(exitCode))
-        }
+        LoggingService.shared.log("Writing credentials to keychain")
+        try KeychainService.shared.writeSystemCLICredentials(jsonData)
+        LoggingService.shared.log("Added Claude Code system credentials successfully")
     }
 
     // MARK: - Profile Sync Operations
@@ -122,45 +42,30 @@ class ClaudeCodeSyncService {
             throw ClaudeCodeError.invalidJSON
         }
 
-        // Save to profile directly
-        var profiles = ProfileStore.shared.loadProfiles()
-        guard let index = profiles.firstIndex(where: { $0.id == profileId }) else {
-            throw ClaudeCodeError.noProfileCredentials
-        }
-
-        profiles[index].cliCredentialsJSON = jsonData
-        ProfileStore.shared.saveProfiles(profiles)
+        // Save CLI credentials to Keychain
+        try KeychainService.shared.save(jsonData, for: .cliCredentialsJSON(profileId: profileId))
 
         LoggingService.shared.log("Synced CLI credentials to profile: \(profileId)")
     }
 
     /// Applies profile's CLI credentials to system (overwrites current login)
     func applyProfileCredentials(_ profileId: UUID) throws {
-        LoggingService.shared.log("🔄 Applying CLI credentials for profile: \(profileId)")
+        LoggingService.shared.log("Applying CLI credentials for profile: \(profileId)")
 
-        let profiles = ProfileStore.shared.loadProfiles()
-        guard let profile = profiles.first(where: { $0.id == profileId }),
-              let jsonData = profile.cliCredentialsJSON else {
-            LoggingService.shared.log("❌ No CLI credentials found for profile: \(profileId)")
+        guard let jsonData = try KeychainService.shared.load(for: .cliCredentialsJSON(profileId: profileId)) else {
+            LoggingService.shared.log("No CLI credentials found for profile: \(profileId)")
             throw ClaudeCodeError.noProfileCredentials
         }
 
-        LoggingService.shared.log("📦 Found CLI credentials, writing to keychain...")
+        LoggingService.shared.log("Found CLI credentials, writing to system keychain...")
         try writeSystemCredentials(jsonData)
 
-        LoggingService.shared.log("✅ Applied profile CLI credentials to system: \(profileId)")
+        LoggingService.shared.log("Applied profile CLI credentials to system: \(profileId)")
     }
 
     /// Removes CLI credentials from profile (doesn't affect system)
     func removeFromProfile(_ profileId: UUID) throws {
-        var profiles = ProfileStore.shared.loadProfiles()
-        guard let index = profiles.firstIndex(where: { $0.id == profileId }) else {
-            throw ClaudeCodeError.noProfileCredentials
-        }
-
-        profiles[index].cliCredentialsJSON = nil
-        ProfileStore.shared.saveProfiles(profiles)
-
+        try KeychainService.shared.delete(for: .cliCredentialsJSON(profileId: profileId))
         LoggingService.shared.log("Removed CLI credentials from profile: \(profileId)")
     }
 
@@ -218,22 +123,21 @@ class ClaudeCodeSyncService {
 
         // Read fresh credentials from system (if user is logged in)
         guard let freshJSON = try readSystemCredentials() else {
-            // No credentials in system - user not logged into CLI anymore
             LoggingService.shared.log("No system credentials found - skipping re-sync")
             return
         }
 
-        // Update profile's stored credentials with fresh ones
+        // Save fresh credentials to Keychain for this profile
+        try KeychainService.shared.save(freshJSON, for: .cliCredentialsJSON(profileId: profileId))
+
+        // Update sync timestamp in UserDefaults profile data
         var profiles = ProfileStore.shared.loadProfiles()
-        guard let index = profiles.firstIndex(where: { $0.id == profileId }) else {
-            return
+        if let index = profiles.firstIndex(where: { $0.id == profileId }) {
+            profiles[index].cliAccountSyncedAt = Date()
+            ProfileStore.shared.saveProfiles(profiles)
         }
 
-        profiles[index].cliCredentialsJSON = freshJSON
-        profiles[index].cliAccountSyncedAt = Date()  // Update sync timestamp
-        ProfileStore.shared.saveProfiles(profiles)
-
-        LoggingService.shared.log("✓ Re-synced CLI credentials from system and updated timestamp")
+        LoggingService.shared.log("Re-synced CLI credentials from system and updated timestamp")
     }
 }
 

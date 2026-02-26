@@ -7,13 +7,14 @@
 
 import Foundation
 
-/// Represents a complete isolated profile with all credentials and settings
+/// Represents a complete isolated profile with all credentials and settings.
+/// Credentials are stored in Keychain (not serialized to UserDefaults).
 struct Profile: Codable, Identifiable, Equatable {
     // MARK: - Identity
     let id: UUID
     var name: String
 
-    // MARK: - Credentials (stored directly in profile)
+    // MARK: - Credentials (in-memory only, stored in Keychain, excluded from Codable)
     var claudeSessionKey: String?
     var organizationId: String?
     var apiSessionKey: String?
@@ -45,6 +46,57 @@ struct Profile: Codable, Identifiable, Equatable {
     // MARK: - Metadata
     var createdAt: Date
     var lastUsedAt: Date
+
+    // Exclude credential fields from Codable -- they live in Keychain
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case hasCliAccount, cliAccountSyncedAt
+        case claudeUsage, apiUsage
+        case iconConfig
+        case refreshInterval, autoStartSessionEnabled, checkOverageLimitEnabled
+        case notificationSettings
+        case isSelectedForDisplay
+        case createdAt, lastUsedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.hasCliAccount = try container.decode(Bool.self, forKey: .hasCliAccount)
+        self.cliAccountSyncedAt = try container.decodeIfPresent(Date.self, forKey: .cliAccountSyncedAt)
+        self.claudeUsage = try container.decodeIfPresent(ClaudeUsage.self, forKey: .claudeUsage)
+        self.apiUsage = try container.decodeIfPresent(APIUsage.self, forKey: .apiUsage)
+        self.iconConfig = try container.decode(MenuBarIconConfiguration.self, forKey: .iconConfig)
+        self.refreshInterval = try container.decode(TimeInterval.self, forKey: .refreshInterval)
+        self.autoStartSessionEnabled = try container.decode(Bool.self, forKey: .autoStartSessionEnabled)
+        self.checkOverageLimitEnabled = try container.decode(Bool.self, forKey: .checkOverageLimitEnabled)
+        self.notificationSettings = try container.decode(NotificationSettings.self, forKey: .notificationSettings)
+        self.isSelectedForDisplay = try container.decode(Bool.self, forKey: .isSelectedForDisplay)
+        self.createdAt = try container.decode(Date.self, forKey: .createdAt)
+        self.lastUsedAt = try container.decode(Date.self, forKey: .lastUsedAt)
+        // Credential fields are loaded from Keychain separately, not from Codable
+        self.claudeSessionKey = nil
+        self.organizationId = nil
+        self.apiSessionKey = nil
+        self.apiOrganizationId = nil
+        self.cliCredentialsJSON = nil
+    }
+
+    static func == (lhs: Profile, rhs: Profile) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.name == rhs.name &&
+        lhs.claudeSessionKey == rhs.claudeSessionKey &&
+        lhs.organizationId == rhs.organizationId &&
+        lhs.apiSessionKey == rhs.apiSessionKey &&
+        lhs.apiOrganizationId == rhs.apiOrganizationId &&
+        lhs.cliCredentialsJSON == rhs.cliCredentialsJSON &&
+        lhs.hasCliAccount == rhs.hasCliAccount &&
+        lhs.refreshInterval == rhs.refreshInterval &&
+        lhs.autoStartSessionEnabled == rhs.autoStartSessionEnabled &&
+        lhs.checkOverageLimitEnabled == rhs.checkOverageLimitEnabled &&
+        lhs.isSelectedForDisplay == rhs.isSelectedForDisplay
+    }
 
     init(
         id: UUID = UUID(),

@@ -110,36 +110,66 @@ class ProfileStore {
         }
     }
 
-    // MARK: - Credential Helpers
+    // MARK: - Credential Helpers (Keychain-backed)
 
     func saveProfileCredentials(_ profileId: UUID, credentials: ProfileCredentials) throws {
-        var profiles = loadProfiles()
-        guard let index = profiles.firstIndex(where: { $0.id == profileId }) else {
-            throw NSError(domain: "ProfileStore", code: 404, userInfo: [NSLocalizedDescriptionKey: "Profile not found"])
+        let keychain = KeychainService.shared
+
+        if let val = credentials.claudeSessionKey {
+            try keychain.save(val, for: .claudeSessionKey(profileId: profileId))
+        } else {
+            try keychain.delete(for: .claudeSessionKey(profileId: profileId))
         }
-
-        // Update credentials directly in profile
-        profiles[index].claudeSessionKey = credentials.claudeSessionKey
-        profiles[index].organizationId = credentials.organizationId
-        profiles[index].apiSessionKey = credentials.apiSessionKey
-        profiles[index].apiOrganizationId = credentials.apiOrganizationId
-        profiles[index].cliCredentialsJSON = credentials.cliCredentialsJSON
-
-        saveProfiles(profiles)
+        if let val = credentials.organizationId {
+            try keychain.save(val, for: .organizationId(profileId: profileId))
+        } else {
+            try keychain.delete(for: .organizationId(profileId: profileId))
+        }
+        if let val = credentials.apiSessionKey {
+            try keychain.save(val, for: .apiSessionKey(profileId: profileId))
+        } else {
+            try keychain.delete(for: .apiSessionKey(profileId: profileId))
+        }
+        if let val = credentials.apiOrganizationId {
+            try keychain.save(val, for: .apiOrganizationId(profileId: profileId))
+        } else {
+            try keychain.delete(for: .apiOrganizationId(profileId: profileId))
+        }
+        if let val = credentials.cliCredentialsJSON {
+            try keychain.save(val, for: .cliCredentialsJSON(profileId: profileId))
+        } else {
+            try keychain.delete(for: .cliCredentialsJSON(profileId: profileId))
+        }
     }
 
     func loadProfileCredentials(_ profileId: UUID) throws -> ProfileCredentials {
-        let profiles = loadProfiles()
-        guard let profile = profiles.first(where: { $0.id == profileId }) else {
-            throw NSError(domain: "ProfileStore", code: 404, userInfo: [NSLocalizedDescriptionKey: "Profile not found"])
-        }
-
+        let keychain = KeychainService.shared
         return ProfileCredentials(
-            claudeSessionKey: profile.claudeSessionKey,
-            organizationId: profile.organizationId,
-            apiSessionKey: profile.apiSessionKey,
-            apiOrganizationId: profile.apiOrganizationId,
-            cliCredentialsJSON: profile.cliCredentialsJSON
+            claudeSessionKey: try keychain.load(for: .claudeSessionKey(profileId: profileId)),
+            organizationId: try keychain.load(for: .organizationId(profileId: profileId)),
+            apiSessionKey: try keychain.load(for: .apiSessionKey(profileId: profileId)),
+            apiOrganizationId: try keychain.load(for: .apiOrganizationId(profileId: profileId)),
+            cliCredentialsJSON: try keychain.load(for: .cliCredentialsJSON(profileId: profileId))
         )
+    }
+
+    /// Loads profiles from UserDefaults and hydrates credentials from Keychain
+    func loadProfilesWithCredentials() -> [Profile] {
+        var profiles = loadProfiles()
+        for i in profiles.indices {
+            if let creds = try? loadProfileCredentials(profiles[i].id) {
+                profiles[i].claudeSessionKey = creds.claudeSessionKey
+                profiles[i].organizationId = creds.organizationId
+                profiles[i].apiSessionKey = creds.apiSessionKey
+                profiles[i].apiOrganizationId = creds.apiOrganizationId
+                profiles[i].cliCredentialsJSON = creds.cliCredentialsJSON
+            }
+        }
+        return profiles
+    }
+
+    /// Deletes all keychain credentials for a profile
+    func deleteProfileCredentials(_ profileId: UUID) throws {
+        try KeychainService.shared.deleteAllProfileKeys(profileId: profileId)
     }
 }

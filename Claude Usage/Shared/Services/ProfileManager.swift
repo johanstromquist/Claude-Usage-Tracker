@@ -28,7 +28,7 @@ class ProfileManager: ObservableObject {
     // MARK: - Initialization
 
     func loadProfiles() {
-        profiles = profileStore.loadProfiles()
+        profiles = profileStore.loadProfilesWithCredentials()
 
         // Ensure minimum 1 profile
         if profiles.isEmpty {
@@ -88,14 +88,7 @@ class ProfileManager: ObservableObject {
 
             if activeProfile?.id == profile.id {
                 activeProfile = profile
-
-                // Detailed logging for credential state
                 LoggingService.shared.log("ProfileManager.updateProfile: Updated ACTIVE profile '\(profile.name)'")
-                LoggingService.shared.log("  - claudeSessionKey: \(profile.claudeSessionKey == nil ? "NIL" : "EXISTS (len: \(profile.claudeSessionKey!.count))")")
-                LoggingService.shared.log("  - organizationId: \(profile.organizationId == nil ? "NIL" : "EXISTS")")
-                LoggingService.shared.log("  - hasClaudeAI: \(profile.hasClaudeAI)")
-                LoggingService.shared.log("  - hasAnyCredentials: \(profile.hasAnyCredentials)")
-                LoggingService.shared.log("  - claudeUsage: \(profile.claudeUsage == nil ? "NIL" : "EXISTS")")
             } else {
                 LoggingService.shared.log("Updated profile: \(profile.name) (not active)")
             }
@@ -113,7 +106,8 @@ class ProfileManager: ObservableObject {
 
         profiles.removeAll { $0.id == id }
 
-        // Credentials are deleted automatically with the profile
+        // Delete credentials from Keychain
+        try profileStore.deleteProfileCredentials(id)
 
         // Switch to first profile if deleted active
         if activeProfile?.id == id {
@@ -191,7 +185,7 @@ class ProfileManager: ObservableObject {
             do {
                 try cliSyncService.resyncBeforeSwitching(for: currentProfile.id)
                 // Reload profiles to get the updated data in memory
-                profiles = profileStore.loadProfiles()
+                profiles = profileStore.loadProfilesWithCredentials()
                 LoggingService.shared.log("✓ Re-synced current profile before switching")
             } catch {
                 LoggingService.shared.logError("Failed to re-sync current profile (non-fatal)", error: error)
@@ -199,7 +193,7 @@ class ProfileManager: ObservableObject {
         }
 
         // Reload profiles from disk to get latest data (including any resyncs from other profiles)
-        profiles = profileStore.loadProfiles()
+        profiles = profileStore.loadProfilesWithCredentials()
 
         // Get the updated target profile from the reloaded data
         guard let updatedProfile = profiles.first(where: { $0.id == id }) else {
@@ -258,9 +252,10 @@ class ProfileManager: ObservableObject {
     }
 
     func saveCredentials(for profileId: UUID, credentials: ProfileCredentials) throws {
+        // Persist to Keychain
         try profileStore.saveProfileCredentials(profileId, credentials: credentials)
 
-        // Update profile in memory
+        // Update in-memory profile
         if let index = profiles.firstIndex(where: { $0.id == profileId }) {
             profiles[index].claudeSessionKey = credentials.claudeSessionKey
             profiles[index].organizationId = credentials.organizationId
@@ -271,6 +266,9 @@ class ProfileManager: ObservableObject {
             if activeProfile?.id == profileId {
                 activeProfile = profiles[index]
             }
+
+            // Save non-credential profile data to UserDefaults
+            profileStore.saveProfiles(profiles)
         }
     }
 
@@ -498,7 +496,7 @@ class ProfileManager: ObservableObject {
             try cliSyncService.syncToProfile(profileId)
 
             // Reload the profile to get updated credentials
-            profiles = profileStore.loadProfiles()
+            profiles = profileStore.loadProfilesWithCredentials()
 
             LoggingService.shared.log("ProfileManager: ✅ Successfully synced CLI credentials to default profile on first launch")
 

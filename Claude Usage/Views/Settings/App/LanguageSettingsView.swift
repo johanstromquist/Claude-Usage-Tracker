@@ -96,11 +96,11 @@ struct LanguageSettingsView: View {
         // Save the current state
         UserDefaults.standard.synchronize()
 
-        // Get the app path
+        // Relaunch using proper argument array (no shell interpolation)
         let task = Process()
-        task.launchPath = "/bin/sh"
-        task.arguments = ["-c", "sleep 0.5; open '\(Bundle.main.bundlePath)'"]
-        task.launch()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", "sleep 0.5; open \"$1\"", "--", Bundle.main.bundlePath]
+        try? task.run()
 
         // Quit the app
         NSApplication.shared.terminate(nil)
