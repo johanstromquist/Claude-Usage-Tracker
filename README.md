@@ -1,5 +1,7 @@
 # Claude Usage Tracker
 
+> **Fork of [hamed-elfayome/Claude-Usage-Tracker](https://github.com/hamed-elfayome/Claude-Usage-Tracker)** -- the original project by Hamed Elfayome. This fork adds Keychain-based credential storage, fixes color threshold alignment, milestone-based notification dedup, and other improvements. See the upstream repo for the canonical version.
+
 <div align="center">
   <img src=".github/cover.jpg" alt="Claude Usage Tracker" width="100%">
 
