@@ -128,13 +128,21 @@ exit(1)
     private let bashScript = """
 #!/bin/bash
 config_file="$HOME/.claude/statusline-config.txt"
+read_config_flag() {
+  key="$1"
+  value=$(grep -E "^${key}=[01]$" "$config_file" 2>/dev/null | tail -n 1 | cut -d= -f2)
+  case "$value" in
+    0|1) printf "%s" "$value" ;;
+    *) printf "1" ;;
+  esac
+}
+
 if [ -f "$config_file" ]; then
-  source "$config_file"
-  show_dir=$SHOW_DIRECTORY
-  show_branch=$SHOW_BRANCH
-  show_usage=$SHOW_USAGE
-  show_bar=$SHOW_PROGRESS_BAR
-  show_reset=$SHOW_RESET_TIME
+  show_dir=$(read_config_flag SHOW_DIRECTORY)
+  show_branch=$(read_config_flag SHOW_BRANCH)
+  show_usage=$(read_config_flag SHOW_USAGE)
+  show_bar=$(read_config_flag SHOW_PROGRESS_BAR)
+  show_reset=$(read_config_flag SHOW_RESET_TIME)
 else
   show_dir=1
   show_branch=1
@@ -371,6 +379,14 @@ SHOW_RESET_TIME=\(showResetTime ? "1" : "0")
 """
 
         try config.write(to: configPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: configPath.path
+        )
+    }
+
+    private func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     /// Enables or disables statusline in Claude Code settings.json
@@ -399,7 +415,7 @@ SHOW_RESET_TIME=\(showResetTime ? "1" : "0")
 
             settings["statusLine"] = [
                 "type": "command",
-                "command": "bash \(commandPath)"
+                "command": "bash \(shellQuoted(commandPath))"
             ]
 
             let jsonData = try JSONSerialization.data(withJSONObject: settings, options: .prettyPrinted)

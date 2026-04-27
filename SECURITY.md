@@ -70,15 +70,16 @@ We'll keep you informed throughout the process and credit you in the security ad
 ### Code Execution
 
 - Claude Code integration scripts are installed to `~/.claude/`
-- Script permissions are set to `755` (read/execute for all, write for owner)
+- Script permissions are set to `700` (owner read/write/execute only)
+- Statusline preferences are parsed as data and written with `600` permissions
 - Scripts only read the existing session key file
 - No arbitrary code execution from external sources
 
 ### Sandboxing
 
-- App Sandbox is **disabled** to allow file system access
-- Required for reading `~/.claude-session-key` and writing `~/.claude/` scripts
-- Necessary trade-off for the app's core functionality
+- Release builds enable App Sandbox with network-client access
+- Claude Code integration uses narrow home-relative exceptions for `~/.claude/` and `~/.claude-session-key`
+- Prefer Keychain-backed profile credentials; file access is retained only for Claude Code interoperability
 
 ## Best Practices for Users
 

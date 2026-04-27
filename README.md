@@ -518,7 +518,7 @@ The setup automatically creates:
 - `~/.claude/statusline-config.txt`: Configuration file with your component preferences
 - `~/.claude/settings.json`: Updated with statusline command (or created if doesn't exist)
 
-All scripts are set with secure permissions (755) and only read your existing session key file.
+Scripts are set with owner-only permissions (`700`), and the statusline preferences file is written with `600` permissions.
 
 ### Customization
 
@@ -572,8 +572,8 @@ This indicates the Swift script couldn't fetch usage data:
 
 If scripts can't be executed:
 ```bash
-chmod 755 ~/.claude/fetch-claude-usage.swift
-chmod 755 ~/.claude/statusline-command.sh
+chmod 700 ~/.claude/fetch-claude-usage.swift
+chmod 700 ~/.claude/statusline-command.sh
 ```
 
 ### Example Statuslines
